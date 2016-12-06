@@ -143,7 +143,7 @@ with tf.Session() as sess:
         _,gLoss = sess.run([update_G,g_loss],feed_dict={z_in:zs})
 
         #save some images
-        if i % 10 == 0:
+        if i % 1000 == 0:
             print ("Gen Loss: " + str(gLoss) + " Disc Loss: " + str(dLoss))
             z2 = np.random.uniform(-1.0,1.0,size=[batch_size,z_size]).astype(np.float32) #Generate another z batch
             newZ = sess.run(Gz,feed_dict={z_in:z2}) #Use new z to get sample images from generator.

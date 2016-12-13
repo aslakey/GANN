@@ -33,6 +33,13 @@ def merge(images, size):
         img[j*h:j*h+h, i*w:i*w+w] = image
 
     return img
+
+def word2vec(labels,embeddings):
+    vectors = np.empty((len(labels),100))
+    for idx in range(len(labels)):
+        vectors[idx] = embeddings[labels[idx]]
+    return vectors
+
 def int_to_words(labels):
     words = []
     lookup = np.array(['zero','one','two','three','four','five','six','seven','eight','nine'])

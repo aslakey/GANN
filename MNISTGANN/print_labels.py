@@ -19,6 +19,10 @@ import MNIST_data
 from MNIST_utils import *
 
 
+# creating the vector embeddings for each label
+#vector_emb = model[cifar_data[2]]
+
+
 WORK_DIRECTORY = 'data'
 SOURCE_URL = 'http://yann.lecun.com/exdb/mnist/'
 IMAGE_SIZE = 28
@@ -124,37 +128,43 @@ update_D = trainerD.apply_gradients(d_grads)
 update_G = trainerG.apply_gradients(g_grads)
 
 print("training")
-sample_directory = './mnistfigs' #Directory to save sample images from generator in.
-model_directory = './mnistmodels' #Directory to save trained model to.
+sample_directory = './w2vmnistfigs' #Directory to save sample images from generator in.
+model_directory = './w2vmnistmodels' #Directory to save trained model to.
+#to read embeddings.  Note that words zero to nine are indexed 0:9
+embeddings = np.genfromtxt('word2vec.csv')
 
 init = tf.initialize_all_variables()
 saver = tf.train.Saver()
 with tf.Session() as sess:  
     sess.run(init)
     for i in range(iterations):
-        zs = np.random.uniform(-1.0,1.0,size=[batch_size,z_size]).astype(np.float32) #Generate a random z batch
+        #zs = np.random.uniform(-1.0,1.0,size=[batch_size,z_size]).astype(np.float32) #Generate a random z batch
         xs,labels = mnist.train.next_batch(batch_size) #Draw a sample batch from MNIST dataset.
-        #words = int_to_words(labels)
+        zs = word2vec(labels,embeddings)
+        '''
         xs = (np.reshape(xs,[batch_size,28,28,1]) - 0.5) * 2.0 #Transform it to be between -1 and 1
         xs = np.lib.pad(xs, ((0,0),(2,2),(2,2),(0,0)),'constant', constant_values=(-1, -1)) #Pad the images so the are 32x32
 
         _,dLoss = sess.run([update_D,d_loss],feed_dict={z_in:zs,real_in:xs}) #Update the discriminator
         _,gLoss = sess.run([update_G,g_loss],feed_dict={z_in:zs}) #Update the generator, twice for good measure.
         _,gLoss = sess.run([update_G,g_loss],feed_dict={z_in:zs})
-
+        '''
         #save some images
         if i % 500 == 0:
-            print ("Gen Loss: " + str(gLoss) + " Disc Loss: " + str(dLoss))
-            z2 = np.random.uniform(-1.0,1.0,size=[batch_size,z_size]).astype(np.float32) #Generate another z batch
-            newZ = sess.run(Gz,feed_dict={z_in:z2}) #Use new z to get sample images from generator.
-            if not os.path.exists(sample_directory):
-                os.makedirs(sample_directory)
+            #print ("Gen Loss: " + str(gLoss) + " Disc Loss: " + str(dLoss))
+            #z2 = np.random.uniform(-1.0,1.0,size=[batch_size,z_size]).astype(np.float32) #Generate another z batch
+            #newZ = sess.run(Gz,feed_dict={z_in:zs}) #Use new z to get sample images from generator.
+            #if not os.path.exists(sample_directory):
+            #    os.makedirs(sample_directory)
             #Save sample generator images for viewing training progress.
-            save_images(np.reshape(newZ[0:36],[36,32,32]),[8,8],sample_directory+'/fig'+str(i)+'.png') #just saving the first 36 of them
-        
+            print("iteration "+str(i))
+            print(labels[0:36])
+            #save_images(np.reshape(newZ[0:36],[36,32,32]),[8,8],sample_directory+'/fig'+str(i)+'.png') #just saving the first 36 of them
+        '''
         #save model
         if i % 1000 == 0 and i != 0:
             if not os.path.exists(model_directory):
                 os.makedirs(model_directory)
             saver.save(sess,model_directory+'/model-'+str(i)+'.cptk')
             print ("Saved Model")   
+        '''

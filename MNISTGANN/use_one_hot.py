@@ -18,10 +18,7 @@ import tensorflow as tf
 import MNIST_data
 from MNIST_utils import *
 
-
-# creating the vector embeddings for each label
-#vector_emb = model[cifar_data[2]]
-
+# This part is a repeat graph
 
 WORK_DIRECTORY = 'data'
 SOURCE_URL = 'http://yann.lecun.com/exdb/mnist/'
@@ -31,12 +28,9 @@ PIXEL_DEPTH = 255
 learning_rate = 0.0002
 decay = 0.5
 
-batch_size = 40
-iterations = 500000 #Total number of iterations to use.
-
-print("loading data")
-mnist = MNIST_data.read_data_sets("MNIST_data/", one_hot=False)
-
+batch_size = 100
+iterations = 100000 #Total number of iterations to use.
+num_classes = 10
 
 
 #define Generator with input z AND y
@@ -99,7 +93,7 @@ def discriminator(bottom, y, reuse=False):
     #output probability
     d_out = slim.fully_connected(d_project,1,activation_fn=tf.nn.sigmoid,\
         reuse=reuse,scope='d_out', weights_initializer=initializer)
-    
+
     return d_out
 
 #BUILD GRAPH
@@ -113,7 +107,7 @@ initializer = tf.truncated_normal_initializer(stddev=0.02)
 
 #These two placeholders are used for input into the generator and discriminator, respectively.
 z_in = tf.placeholder(shape=[None,z_size],dtype=tf.float32) #Random vector
-y_in = tf.placeholder(shape=[None,z_size],dtype=tf.float32) #labels as word vectors
+y_in = tf.placeholder(shape=[None,num_classes],dtype=tf.float32) #labels as one_hotvectors
 
 real_in = tf.placeholder(shape=[None,32,32,1],dtype=tf.float32) #Real images
 
@@ -127,9 +121,11 @@ g_loss = -tf.reduce_mean(tf.log(Dg)) #This optimizes the generator.
 
 tvars = tf.trainable_variables()
 
-#The below code is responsible for applying gradient descent to update the GAN.
+#Adam optimizer with low learning rate and decay
 trainerD = tf.train.AdamOptimizer(learning_rate=learning_rate,beta1=decay) 
 trainerG = tf.train.AdamOptimizer(learning_rate=learning_rate,beta1=decay)
+
+#grab variables and compute gradients. First 10 are Generator (could also grab by scope starts with g)
 d_grads = trainerD.compute_gradients(d_loss,tvars[9:]) #Only update the weights for the discriminator network.  After the first 5 layers (5*2 = 10)
 g_grads = trainerG.compute_gradients(g_loss,tvars[0:9]) #Only update the weights for the generator network.  This is the first 10 sets of weights and biases
 
@@ -139,42 +135,40 @@ update_G = trainerG.apply_gradients(g_grads)
 print("training")
 sample_directory = './w2vmnistfigs' #Directory to save sample images from generator in.
 model_directory = './w2vmnistmodels' #Directory to save trained model to.
-#to read embeddings.  Note that words zero to nine are indexed 0:9
-embeddings = np.genfromtxt('word2vec.csv')
 
-init = tf.initialize_all_variables()
+
+
+#Trying to print 8 images of each "mode"
+labels = np.array([0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7,7,7,7,8,8,8,8,8,8,8,8,8,8,8,8,9,9,9,9,9,9,9,9,9,9,9,9])
+
+def dense_to_one_hot(labels_dense, num_classes=10):
+    """Convert class labels from scalars to one-hot vectors."""
+    num_labels = labels_dense.shape[0]
+    index_offset = numpy.arange(num_labels) * num_classes
+    labels_one_hot = numpy.zeros((num_labels, num_classes))
+    labels_one_hot.flat[index_offset + labels_dense.ravel()] = 1
+    return labels_one_hot
+
+
+batch_size_sample = len(labels)
+ys = dense_to_one_hot(labels)
+
+
+
+#init = tf.initialize_all_variables()
 saver = tf.train.Saver()
 with tf.Session() as sess:  
-    sess.run(init)
-    for i in range(iterations):
-        zs = np.random.uniform(-1.0,1.0,size=[batch_size,z_size]).astype(np.float32) #Generate a random z batch
-        xs,labels = mnist.train.next_batch(batch_size) #Draw a sample batch from MNIST dataset.
-        ys = word2vec(labels,embeddings)
-
-        #reshaping images
-        xs = (np.reshape(xs,[batch_size,28,28,1]) - 0.5) * 2.0 #Transform it to be between -1 and 1
-        xs = np.lib.pad(xs, ((0,0),(2,2),(2,2),(0,0)),'constant', constant_values=(-1, -1)) #Pad the images so the are 32x32
-
-        _,dLoss = sess.run([update_D,d_loss],feed_dict={z_in:zs, y_in:ys, real_in:xs}) #Update the discriminator
-        _,gLoss = sess.run([update_G,g_loss],feed_dict={z_in:zs, y_in:ys}) #Update the generator, twice for good measure.
-        _,gLoss = sess.run([update_G,g_loss],feed_dict={z_in:zs, y_in:ys})
-
-        #save some images
-        if i % 1000 == 0:
-            print("iteration "+str(i))
-            print ("Gen Loss: " + str(gLoss) + " Disc Loss: " + str(dLoss))
-            print(labels[0:36])
-            #z2 = np.random.uniform(-1.0,1.0,size=[batch_size,z_size]).astype(np.float32) #Generate another z batch
-            newZ = sess.run(Gz,feed_dict={z_in:zs, y_in:ys}) #Use new z to get sample images from generator.
-            if not os.path.exists(sample_directory):
-                os.makedirs(sample_directory)
-            #Save sample generator images for viewing training progress.
-            save_images(np.reshape(newZ[0:36],[36,32,32]),[8,8],sample_directory+'/fig'+str(i)+'.png') #just saving the first 36 of them
-        
-        #save model
-        if i % 1000 == 0:
-            if not os.path.exists(model_directory):
-                os.makedirs(model_directory)
-            #saver.save(sess,model_directory+'/model-'+str(i)+'.cptk')
-            saver.save(sess, sample_directory+'/my-model') #apparently a new update to tensorflow.  this method will save a "my-model.meta" file
-            print ("Saved Model")   
+    #sess.run(init)
+    #Reload the model.
+    print ('Loading Model...') #.data-00000-of-00001
+    ckpt = tf.train.get_checkpoint_state(sample_directory)#(path)
+    saver.restore(sess,ckpt.model_checkpoint_path)
+    #saver.restore(sess,'w2vmnistmodels/model-29000.cptk.data-00000-of-00001')
+    #new_saver = tf.train.import_meta_graph(sample_directory+'/my-model.meta')
+    #new_saver.restore(sess, tf.train.latest_checkpoint('./'))
+    
+    zs = np.random.uniform(-1.0,1.0,size=[batch_size_sample,z_size]).astype(np.float32) #Generate a random z batch
+    newZ = sess.run(Gz,feed_dict={z_in:zs, y_in:ys})  #Use new z to get sample images from generator.
+    if not os.path.exists(sample_directory):
+        os.makedirs(sample_directory)
+    save_images(np.reshape(newZ[0:batch_size_sample],[len(labels),32,32]),[12,12],sample_directory+'/0_9'+'.png')

@@ -18,9 +18,14 @@ import tensorflow as tf
 import MNIST_data
 from MNIST_utils import *
 
+'''
+ This is a conditional GANN similar to the w2vMNISTGANN
 
-# creating the vector embeddings for each label
-#vector_emb = model[cifar_data[2]]
+ Only difference is that y_in is a one hot vector instead of a word vector
+
+ The idea is that maybe the owrds are just too close together (plus a one hundred feature vector is a lot more to learn)
+
+'''
 
 
 WORK_DIRECTORY = 'data'
@@ -30,12 +35,14 @@ NUM_CHANNELS = 1
 PIXEL_DEPTH = 255
 learning_rate = 0.0002
 decay = 0.5
+num_classes = 10
 
-batch_size = 40
+batch_size = 100
 iterations = 500000 #Total number of iterations to use.
 
 print("loading data")
-mnist = MNIST_data.read_data_sets("MNIST_data/", one_hot=False)
+#one_hot = True returns labels as one_hot vectors
+mnist = MNIST_data.read_data_sets("MNIST_data/", one_hot=True)
 
 
 
@@ -99,7 +106,7 @@ def discriminator(bottom, y, reuse=False):
     #output probability
     d_out = slim.fully_connected(d_project,1,activation_fn=tf.nn.sigmoid,\
         reuse=reuse,scope='d_out', weights_initializer=initializer)
-    
+
     return d_out
 
 #BUILD GRAPH
@@ -113,7 +120,7 @@ initializer = tf.truncated_normal_initializer(stddev=0.02)
 
 #These two placeholders are used for input into the generator and discriminator, respectively.
 z_in = tf.placeholder(shape=[None,z_size],dtype=tf.float32) #Random vector
-y_in = tf.placeholder(shape=[None,z_size],dtype=tf.float32) #labels as word vectors
+y_in = tf.placeholder(shape=[None,num_classes],dtype=tf.float32) #labels as one_hotvectors
 
 real_in = tf.placeholder(shape=[None,32,32,1],dtype=tf.float32) #Real images
 
@@ -127,9 +134,11 @@ g_loss = -tf.reduce_mean(tf.log(Dg)) #This optimizes the generator.
 
 tvars = tf.trainable_variables()
 
-#The below code is responsible for applying gradient descent to update the GAN.
+#Adam optimizer with low learning rate and decay
 trainerD = tf.train.AdamOptimizer(learning_rate=learning_rate,beta1=decay) 
 trainerG = tf.train.AdamOptimizer(learning_rate=learning_rate,beta1=decay)
+
+#grab variables and compute gradients. First 10 are Generator (could also grab by scope starts with g)
 d_grads = trainerD.compute_gradients(d_loss,tvars[9:]) #Only update the weights for the discriminator network.  After the first 5 layers (5*2 = 10)
 g_grads = trainerG.compute_gradients(g_loss,tvars[0:9]) #Only update the weights for the generator network.  This is the first 10 sets of weights and biases
 
@@ -139,8 +148,6 @@ update_G = trainerG.apply_gradients(g_grads)
 print("training")
 sample_directory = './w2vmnistfigs' #Directory to save sample images from generator in.
 model_directory = './w2vmnistmodels' #Directory to save trained model to.
-#to read embeddings.  Note that words zero to nine are indexed 0:9
-embeddings = np.genfromtxt('word2vec.csv')
 
 init = tf.initialize_all_variables()
 saver = tf.train.Saver()
@@ -148,8 +155,7 @@ with tf.Session() as sess:
     sess.run(init)
     for i in range(iterations):
         zs = np.random.uniform(-1.0,1.0,size=[batch_size,z_size]).astype(np.float32) #Generate a random z batch
-        xs,labels = mnist.train.next_batch(batch_size) #Draw a sample batch from MNIST dataset.
-        ys = word2vec(labels,embeddings)
+        xs,ys = mnist.train.next_batch(batch_size) #Draw a sample batch from MNIST dataset.
 
         #reshaping images
         xs = (np.reshape(xs,[batch_size,28,28,1]) - 0.5) * 2.0 #Transform it to be between -1 and 1
@@ -163,7 +169,8 @@ with tf.Session() as sess:
         if i % 1000 == 0:
             print("iteration "+str(i))
             print ("Gen Loss: " + str(gLoss) + " Disc Loss: " + str(dLoss))
-            print(labels[0:36])
+            #what should be printing out :)
+            print("labels",np.nonzero(ys)[1])
             #z2 = np.random.uniform(-1.0,1.0,size=[batch_size,z_size]).astype(np.float32) #Generate another z batch
             newZ = sess.run(Gz,feed_dict={z_in:zs, y_in:ys}) #Use new z to get sample images from generator.
             if not os.path.exists(sample_directory):

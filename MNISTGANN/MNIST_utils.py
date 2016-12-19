@@ -5,6 +5,13 @@ import matplotlib.pyplot as plt
 import os
 import scipy.misc
 
+'''
+Utility functions for all MNIST GAN models
+
+some are written by me (Austin Slakey), others by carpdem20's 
+implementation https://github.com/carpedm20/DCGAN-tensorflow
+'''
+
 #This function performns a leaky relu activation, which is needed for the discriminator network.
 def lrelu(x, leak=0.2, name="lrelu"):
      with tf.variable_scope(name):
@@ -33,6 +40,9 @@ def merge(images, size):
         img[j*h:j*h+h, i*w:i*w+w] = image
 
     return img
+def save_single(image, path):
+    im = inverse_transform(image)
+    return scipy.misc.imsave(path,im)
 
 def word2vec(labels,embeddings):
     vectors = np.empty((len(labels),100))

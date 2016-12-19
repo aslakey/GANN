@@ -18,12 +18,34 @@ import tensorflow as tf
 import MNIST_data
 from MNIST_utils import *
 
-'''
-Word to Vector MNIST GAN Model
 
-Conditional on the input word, a generator's goal is to 
-generate images that look like real data
 '''
+This file will allow us to Generate images from any word input
+
+We will want to test if the Generator can generalize to unseen words
+
+Note that all images will be concatenated in order
+'''
+
+print("loading GloVe")
+
+#set of words we might need
+words = ('zero','one','two','three','four','five','six','seven','eight','nine','number','none','nil','oblivion','single','sole','solitary','couple','double','pair','triplets','trilogy','trio')
+word_list = ['zero','one','two','three','none','sole','pair','trio']
+#read lines of GloVe 100 dimension file
+#if line[0] is in set then add it to the hashmap
+hashmap = {}
+with open("glove/glove.6B.100d.txt", "r") as ins:
+    array = []
+    for line in ins:
+        array = line.split()
+        if array[0] in words:
+            #rest of array is the word vector
+            word = array[0]
+            vector = np.array(array[1:]).astype(float)
+            hashmap[word] = vector
+
+# This part is a repeat graph
 
 WORK_DIRECTORY = 'data'
 SOURCE_URL = 'http://yann.lecun.com/exdb/mnist/'
@@ -33,12 +55,9 @@ PIXEL_DEPTH = 255
 learning_rate = 0.0002
 decay = 0.5
 
-batch_size = 40
-iterations = 500000 #Total number of iterations to use.
-
-print("loading data")
-mnist = MNIST_data.read_data_sets("MNIST_data/", one_hot=False)
-
+batch_size = 100
+iterations = 100000 #Total number of iterations to use.
+#define Generator with input z AND y
 
 
 #define Generator with input z AND y
@@ -141,42 +160,46 @@ update_G = trainerG.apply_gradients(g_grads)
 print("training")
 sample_directory = './w2vmnistfigs' #Directory to save sample images from generator in.
 model_directory = './w2vmnistmodels' #Directory to save trained model to.
-#to read embeddings.  Note that words zero to nine are indexed 0:9
-embeddings = np.genfromtxt('word2vec.csv')
 
-init = tf.initialize_all_variables()
+#we are going to save each word to its own image
+batch_size_sample = 1
+
+#init = tf.initialize_all_variables()
 saver = tf.train.Saver()
 with tf.Session() as sess:  
-    sess.run(init)
-    for i in range(iterations):
-        zs = np.random.uniform(-1.0,1.0,size=[batch_size,z_size]).astype(np.float32) #Generate a random z batch
-        xs,labels = mnist.train.next_batch(batch_size) #Draw a sample batch from MNIST dataset.
-        ys = word2vec(labels,embeddings)
+    #sess.run(init)
+    #Reload the model.
+    print ('Loading Model...') #.data-00000-of-00001
+    ckpt = tf.train.get_checkpoint_state(sample_directory)#(path)
+    saver.restore(sess,ckpt.model_checkpoint_path)
+    #saver.restore(sess,'w2vmnistmodels/model-29000.cptk.data-00000-of-00001')
+    #new_saver = tf.train.import_meta_graph(sample_directory+'/my-model.meta')
+    #new_saver.restore(sess, tf.train.latest_checkpoint('./'))
+    batch_y=list()
+    for key in word_list:
+        print(key)
+        zs = np.random.uniform(-1.0,1.0,size=[batch_size_sample,z_size]).astype(np.float32) #Generate a random z batch
+        ys = hashmap[key]
+        batch_y.append(ys)
+        ys = np.reshape(ys,(batch_size_sample,100))
+        '''
+        newZ = sess.run(Gz,feed_dict={z_in:zs, y_in:ys})  #Use new z to get sample images from generator.
+        if not os.path.exists(sample_directory):
+            os.makedirs(sample_directory)
+        print("saving "+key)
+        #print(newZ)
+        save_single(np.reshape(newZ,[32,32]),sample_directory+'/'+key+'.png')
+        #save_images(np.reshape(newZ,[batch_size_sample,32,32]),[1,1],sample_directory+'/'+key+'.png')
+        '''
+    batch_z = zs = np.random.uniform(-1.0,1.0,size=[len(batch_y),z_size]).astype(np.float32)
+    y_input = np.asarray(batch_y)
+    newZ = sess.run(Gz,feed_dict={z_in:batch_z, y_in:y_input})  #Use new z to get sample images from generator.
+    if not os.path.exists(sample_directory):
+        os.makedirs(sample_directory)
+    print("saving ")
+    #print(newZ)
+    #save_single(np.reshape(newZ,[32,32]),sample_directory+'/'+'synonyms.png')
+    save_images(np.reshape(newZ,[len(batch_y),32,32]),[8,8],sample_directory+'/synonyms.png')
 
-        #reshaping images
-        xs = (np.reshape(xs,[batch_size,28,28,1]) - 0.5) * 2.0 #Transform it to be between -1 and 1
-        xs = np.lib.pad(xs, ((0,0),(2,2),(2,2),(0,0)),'constant', constant_values=(-1, -1)) #Pad the images so the are 32x32
 
-        _,dLoss = sess.run([update_D,d_loss],feed_dict={z_in:zs, y_in:ys, real_in:xs}) #Update the discriminator
-        _,gLoss = sess.run([update_G,g_loss],feed_dict={z_in:zs, y_in:ys}) #Update the generator, twice for good measure.
-        _,gLoss = sess.run([update_G,g_loss],feed_dict={z_in:zs, y_in:ys})
 
-        #save some images
-        if i % 1000 == 0:
-            print("iteration "+str(i))
-            print ("Gen Loss: " + str(gLoss) + " Disc Loss: " + str(dLoss))
-            print(labels[0:36])
-            #z2 = np.random.uniform(-1.0,1.0,size=[batch_size,z_size]).astype(np.float32) #Generate another z batch
-            newZ = sess.run(Gz,feed_dict={z_in:zs, y_in:ys}) #Use new z to get sample images from generator.
-            if not os.path.exists(sample_directory):
-                os.makedirs(sample_directory)
-            #Save sample generator images for viewing training progress.
-            save_images(np.reshape(newZ[0:36],[36,32,32]),[8,8],sample_directory+'/fig'+str(i)+'.png') #just saving the first 36 of them
-        
-        #save model
-        if i % 1000 == 0:
-            if not os.path.exists(model_directory):
-                os.makedirs(model_directory)
-            #saver.save(sess,model_directory+'/model-'+str(i)+'.cptk')
-            saver.save(sess, sample_directory+'/my-model') #apparently a new update to tensorflow.  this method will save a "my-model.meta" file
-            print ("Saved Model")   

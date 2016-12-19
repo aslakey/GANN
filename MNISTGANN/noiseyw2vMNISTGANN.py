@@ -19,10 +19,12 @@ import MNIST_data
 from MNIST_utils import *
 
 '''
-Word to Vector MNIST GAN Model
+The noisey Word to Vector GAN Model
 
-Conditional on the input word, a generator's goal is to 
-generate images that look like real data
+In order to generalize to the word feature space,
+We add a small random uniform (-.1,.1) to the embedding vectors
+
+This should allow the Generator to learn what similar words might look like
 '''
 
 WORK_DIRECTORY = 'data'
@@ -139,8 +141,8 @@ update_D = trainerD.apply_gradients(d_grads)
 update_G = trainerG.apply_gradients(g_grads)
 
 print("training")
-sample_directory = './w2vmnistfigs' #Directory to save sample images from generator in.
-model_directory = './w2vmnistmodels' #Directory to save trained model to.
+sample_directory = './noiseyw2vmnistfigs' #Directory to save sample images from generator in.
+model_directory = './noiseyw2vmnistmodels' #Directory to save trained model to.
 #to read embeddings.  Note that words zero to nine are indexed 0:9
 embeddings = np.genfromtxt('word2vec.csv')
 
@@ -151,7 +153,9 @@ with tf.Session() as sess:
     for i in range(iterations):
         zs = np.random.uniform(-1.0,1.0,size=[batch_size,z_size]).astype(np.float32) #Generate a random z batch
         xs,labels = mnist.train.next_batch(batch_size) #Draw a sample batch from MNIST dataset.
-        ys = word2vec(labels,embeddings)
+        #train on noisey word vectors
+        noise = np.random.uniform(-0.1,0.1,size=[batch_size,z_size]).astype(np.float32)
+        ys = word2vec(labels,embeddings) + noise #adding uniform(-.1,.1)
 
         #reshaping images
         xs = (np.reshape(xs,[batch_size,28,28,1]) - 0.5) * 2.0 #Transform it to be between -1 and 1
